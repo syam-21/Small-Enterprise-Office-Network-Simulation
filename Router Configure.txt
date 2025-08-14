@@ -1,0 +1,169 @@
+ISP1
+===========
+enable
+conf t
+hostname ISP1
+
+! Interfaces
+interface g0/0
+ ip address 203.0.113.1 255.255.255.0
+ no shutdown
+
+interface g0/1
+ ip address 200.0.0.1 255.255.255.252
+ no shutdown
+
+! Static routes to internal networks via ISP2
+ip route 192.168.10.0 255.255.255.0 200.0.0.2
+ip route 192.168.20.0 255.255.255.0 200.0.0.2
+ip route 200.0.0.4 255.255.255.252 200.0.0.2
+ip route 10.0.0.0 255.255.255.252 200.0.0.2
+ip route 10.0.0.4 255.255.255.252 200.0.0.2
+
+end
+wr
+------------------------------------------------------------
+----------------------------------------------------------
+
+ISP2
+===========
+
+enable
+conf t
+hostname ISP2
+
+! Interfaces
+interface g0/0
+ ip address 200.0.0.2 255.255.255.252
+ no shutdown
+
+interface g0/1
+ ip address 200.0.0.6 255.255.255.252
+ no shutdown
+
+! Static routes to internal networks via R1-CENTRAL
+ip route 192.168.10.0 255.255.255.0 200.0.0.5
+ip route 192.168.20.0 255.255.255.252 200.0.0.5
+ip route 203.0.113.0 255.255.255.0 200.0.0.1
+ip route 10.0.0.0 255.255.255.252 200.0.0.5
+ip route 10.0.0.4 255.255.255.252 200.0.0.5
+
+
+end
+wr
+
+--------------------------------------
+---------------------------------------
+
+R1-CENTRAL
+==================
+
+enable
+conf t
+hostname R1-CENTRAL
+
+! Interfaces
+interface g0/0
+ ip address 10.0.0.1 255.255.255.252
+ ip nat inside
+ no shutdown
+
+interface g0/1
+ ip address 10.0.0.5 255.255.255.252
+ ip nat inside
+ no shutdown
+
+interface g0/2
+ ip address 200.0.0.5 255.255.255.252
+ ip nat outside
+ no shutdown
+
+! NAT Overload
+access-list 10 permit 192.168.10.0 0.0.0.255
+access-list 10 permit 192.168.20.0 0.0.0.255
+ip nat inside source list 10 interface g0/2 overload
+
+! ACL to block Customer -> POS
+ip access-list extended BLOCK_CUST_TO_POS
+ deny ip 192.168.20.0 0.0.0.255 192.168.10.0 0.0.0.255
+ permit ip any any
+!
+interface g0/1
+ ip access-group BLOCK_CUST_TO_POS in
+
+! Static route to ISP1 external server network
+ip route 203.0.113.0 255.255.255.0 200.0.0.6
+ip route 200.0.0.0 255.255.255.252 200.0.0.6
+ip route 192.168.10.0 255.255.255.0 10.0.0.2
+ip route 192.168.20.0 255.255.255.0 10.0.0.6
+
+
+end
+wr
+-----------------------------------------------
+-----------------------------------------------
+
+R2-POS
+=======================
+enable
+conf t
+hostname R2-POS
+
+! Interfaces
+interface g0/0
+ ip address 10.0.0.2 255.255.255.252
+ ip nat inside
+ no shutdown
+
+interface g0/1
+ ip address 192.168.10.1 255.255.255.0
+ ip nat inside
+ no shutdown
+
+! DHCP for POS
+ip dhcp pool POS_POOL
+ network 192.168.10.0 255.255.255.0
+ default-router 192.168.10.1
+ dns-server 192.168.10.10
+ ip dhcp excluded-address 192.168.10.1 192.168.10.99
+ ip dhcp excluded-address 192.168.10.201 192.168.10.254
+
+! Default route to R1-CENTRAL
+ip route 0.0.0.0 0.0.0.0 10.0.0.1
+
+end
+wr
+------------------------------------------------
+------------------------------------------------
+
+R3-CUST
+=======================
+enable
+conf t
+hostname R3-CUST
+
+! Interfaces
+interface g0/0
+ ip address 10.0.0.6 255.255.255.252
+ ip nat inside
+ no shutdown
+
+interface g0/1
+ ip address 192.168.20.1 255.255.255.0
+ ip nat inside
+ no shutdown
+
+! DHCP for Customers
+ip dhcp pool CUST_POOL
+ network 192.168.20.0 255.255.255.0
+ default-router 192.168.20.1
+ dns-server 192.168.10.10
+ ip dhcp excluded-address 192.168.20.1 192.168.20.99
+ ip dhcp excluded-address 192.168.20.251 192.168.20.254
+
+! Default route to R1-CENTRAL
+ip route 0.0.0.0 0.0.0.0 10.0.0.5
+
+end
+wr
+===============================================
